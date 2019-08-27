@@ -1,4 +1,4 @@
-from .app import app,mongo
+from . import app,mongo
 from bson.json_util import dumps
 from bson.objectid import ObjectId
 from flask import jsonify,request
@@ -82,7 +82,7 @@ def add_album():
     rilis = _json['rilis']
     tracks = _json['tracks']
     artist_id = _json['artist_id']
-    if _id and name and rilis and tracks and artist_id and request.method=='DELETE':
+    if _id and name and rilis and tracks and artist_id and request.method=='POST':
         mongo.album.insert({'_id':_id,'name':name,'rilis':rilis,'tracks':tracks,'artist_id':artist_id})
         resp = jsonify('Album added successfully')
         resp.status_code = 200
@@ -104,10 +104,39 @@ def update_albm():
     except KeyError:
         pass
     try:
-        data['genre'] = _json['genre']
+        data['tracks'] = _json['tracks']
+    except KeyError:
+        pass
+    try:
+        data['artist_id'] = _json['artist_id']
     except KeyError:
         pass
 
+    if _id and data and request.method=='PUT':
+        mongo.album.update_one({'_id':_id},{'$set':{**data}})
+        resp = jsonify('Album updated successfully!')
+        resp.status_code = 200
+        return resp
+    else:
+        return not_found()
+
+@app.route('/delete-album', methods=['DELETE'])
+def delete_album():
+    _json = request.json
+    _id = _json['_id']    
+    if _id and request.method=='DELETE':
+        mongo.artist.delete_one({'_id':_id})
+        resp = jsonify('Album deleted successfully!')
+        resp.status_code = 200
+        return resp
+    else:
+        return not_found()
+
+@app.route('/album/<id>')
+def album_detail(id):
+    album = mongo.album.find_one({'_id':id})
+    resp = dumps(album)
+    return resp
 
 @app.errorhandler(404)
 def not_found(error=None):
