@@ -4,98 +4,48 @@ from bson.objectid import ObjectId
 from flask import jsonify,request
 import re
 
-date_format = '^[\d]{4}-[\d]{2}-[\d]{2} [\d]{2}:[\d]{2}$'
+def check_date(date):
+    date_format = '^[\d]{4}-[\d]{2}-[\d]{2} [\d]{2}:[\d]{2}$'
+    return bool(re.match(date_format,date))
 
-@app.route('/artist')
-@app.route('/artist/<id>')
-def artist(id=None, methods=['GET','POST','PUT','DELETE']):
-    # genre = request.args.get('genre')
-    # if genre:
-    #     artist = mongo.artist.find({'genre':genre})
-    # elif id:
-    #     artist = mongo.artist.find_one({'_id':ObjectId(id)})
-    # else:
-    #     artist = mongo.artist.find()
-    if id:
-        artist_id = ObjectId(id)
-        if request.method!='GET':
-            _json = request.json
-            data = {}
-            try:
-                data['name'] = _json['name']
-            except KeyError:
-                pass
-            try:
-                data['tanggal_lahir'] = _json['tanggal_lahir']
-                if not re.match(date_format,data['tanggal_lahir']):
-                    resp = jsonify('Format {} salah, seharusnya, YYYY-MM-DD HH:MM'.format(data['tanggal_lahir']))
-                    resp.status_code = 500
-                    return resp
-            except KeyError:
-                pass
-            try:
-                data['genre'] = _json['genre']
-            except KeyError:
-                pass
-        else:
-            mongo.artist.find_one({'_id':artist_id})
-    else:
-        if request.method=='POST':
-            _json = request.json
-            name = _json['name']
-            tanggal_lahir = _json['tanggal_lahir']
-            genre = _json['genre']
-            mongo.artist.insert({'name':name,'tanggal_lahir':tanggal_lahir,'genre':genre})
-            resp = jsonify('Artist {} added successfully!'.format(name))
-            resp.status_code = 200
+def post_artist(json):
+    try:
+        name = json['name']
+        tanggal_lahir = json['tanggal_lahir']
+        genre = json['genre']
+        if not check_date(tanggal_lahir):
+            resp = jsonify('Format {} salah, seharusnya, YYYY-MM-DD HH:MM'.format(tanggal_lahir))
+            resp.status_code = 500
             return resp
-        else:
-            artist = mongo.artist.find()
-    resp = dumps(artist)
-    return resp
-
-@app.route('/add-artist',methods=['POST'])
-def add_artist():
-    _json = request.json
-    name = _json['name']
-    tanggal_lahir = _json['tanggal_lahir']
-    genre = _json['genre']
-
-    #validate date format
-    if not re.match(date_format,tanggal_lahir):
-        resp = jsonify('Format {} salah, seharusnya, YYYY-MM-DD HH:MM'.format(tanggal_lahir))
-        resp.status_code = 500
-        return resp
-
-    if name and tanggal_lahir and genre and request.method=='POST':
         mongo.artist.insert({'name':name,'tanggal_lahir':tanggal_lahir,'genre':genre})
         resp = jsonify('Artist {} added successfully!'.format(name))
         resp.status_code = 200
         return resp
-    else:
-        return not_found()
+    except:
+        resp = jsonify('Add Artist Process Failed')
+        resp.status_code=500
+        return resp
 
-@app.route('/artist/<id>/update', methods=['PUT'])
-def update_artist(id):
-    _json = request.json
+def put_artist(json):
     data = {}
     try:
-        data['name'] = _json['name']
+        data['name'] = json['name']
     except KeyError:
         pass
     try:
-        data['tanggal_lahir'] = _json['tanggal_lahir']
-        if not re.match(date_format,data['tanggal_lahir']):
-            resp = jsonify('Format {} salah, seharusnya, YYYY-MM-DD HH:MM'.format(data['tanggal_lahir']))
-            resp.status_code = 500
-            return resp
+        data['tanggal_lahir'] = json['tanggal_lahir']
     except KeyError:
         pass
     try:
-        data['genre'] = _json['genre']
+        data['genre'] = json['genre']
     except KeyError:
-        pass
-    if data and request.method=='PUT':
+        pass   
+    if 'tanggal_lahir' in data.keys() and not check_date(data['tanggal_lahir']):
+        resp = jsonify('Format {} salah, seharusnya, YYYY-MM-DD HH:MM'.format(data['tanggal_lahir']))
+        resp.status_code = 500
+        return resp
+    elif data:
+        id = json['_id']
         mongo.artist.update_one({'_id':ObjectId(id)},{'$set':{**data}})
         resp = jsonify('Artist with id {} updated successfully!'.format(id))
         resp.status_code = 200
@@ -103,16 +53,32 @@ def update_artist(id):
     else:
         return not_found()
 
-@app.route('/artist/<id>/delete',methods=['DELETE'])
 def delete_artist(id):
-    if request.method=='DELETE':
-        album = mongo.album.delete_many({'artist_id':ObjectId(id)})
-        mongo.artist.delete_one({'_id':ObjectId(id)})
-        resp = jsonify('Artist with id {} and its album deleted successfully!'.format(id))
-        resp.status_code = 200
-        return resp
+    album = mongo.album.delete_many({'artist_id':id})
+    mongo.artist.delete_one({'_id':ObjectId(id)})
+    resp = jsonify('Artist with id {} and its album deleted successfully!'.format(id))
+    resp.status_code = 200
+    return resp
+
+@app.route('/artist',methods=['GET','POST','PUT','DELETE'])
+def artist(id=None):
+    _json = request.json
+    if _json and '_id' in _json.keys():
+        if request.method=='DELETE':
+            return delete_artist(_json['id'])
+        elif request.method=='PUT':
+            return put_artist(_json)
+        else:
+            artist = mongo.artist.find_one({'_id':ObjectId(_json['_id'])})
+            resp = dumps(artist)
+            return resp
     else:
-        return not_found()
+        if request.method=='POST':
+            return post_artist(_json)
+        else:
+            artist = mongo.artist.find()
+            resp = dumps(artist)
+            return resp
 
 @app.route('/album')
 @app.route('/artist/<id>/album')
